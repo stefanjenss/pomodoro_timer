@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pomodoro Timer</title>
+  <style>
+    :root {
+      --bg-start: #fdf5e6;
+      --bg-end: #f4efe5;
+      --panel: #ffffffcc;
+      --text: #1f2933;
+      --muted: #52606d;
+      --work-accent: #c44536;
+      --break-accent: #2f855a;
+      --border: #d9e2ec;
+      --button-bg: #243b53;
+      --button-text: #f0f4f8;
+      --button-muted-bg: #d9e2ec;
+      --button-muted-text: #334e68;
+      --complete-ring: #f6ad55;
+      --shadow: 0 12px 36px rgba(31, 41, 51, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+      background: radial-gradient(circle at top left, var(--bg-start), var(--bg-end));
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+
+    .app {
+      width: min(680px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(6px);
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.4rem, 2.4vw, 1.9rem);
+      letter-spacing: 0.02em;
+    }
+
+    .subline {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-top: 4px;
+    }
+
+    .preset-group {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .preset-btn {
+      border: 0;
+      background: transparent;
+      padding: 10px 16px;
+      cursor: pointer;
+      font-weight: 700;
+      color: var(--button-muted-text);
+    }
+
+    .preset-btn[aria-pressed="true"] {
+      background: var(--button-bg);
+      color: var(--button-text);
+    }
+
+    .timer-shell {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      text-align: center;
+      position: relative;
+      transition: transform 150ms ease, box-shadow 150ms ease;
+      background: #fff;
+    }
+
+    .timer-shell.phase-work {
+      box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--work-accent) 15%, white);
+    }
+
+    .timer-shell.phase-break {
+      box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--break-accent) 16%, white);
+    }
+
+    .timer-shell.phase-complete {
+      animation: pulse 900ms ease-in-out 2;
+      box-shadow: inset 0 0 0 4px var(--complete-ring);
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.01); }
+      100% { transform: scale(1); }
+    }
+
+    .phase-label {
+      margin: 0;
+      font-size: 0.95rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .timer {
+      margin: 10px 0 8px;
+      font-size: clamp(3rem, 14vw, 6rem);
+      line-height: 1;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .phase-note {
+      margin: 0;
+      min-height: 1.5rem;
+      color: var(--muted);
+      font-size: 0.96rem;
+    }
+
+    .progress-wrap {
+      margin-top: 14px;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 12px;
+      border-radius: 999px;
+      background: #e7edf3;
+      overflow: hidden;
+      border: 1px solid #d4dee9;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      transition: width 320ms linear, background-color 160ms ease;
+      background: linear-gradient(90deg, #b83b2f, #e07a5f);
+      background-size: 180% 100%;
+      animation: progressFlow 2s linear infinite;
+    }
+
+    .progress-fill.break {
+      background: linear-gradient(90deg, #1f7a50, #4caf7c);
+    }
+
+    @keyframes progressFlow {
+      from { background-position: 0% 0; }
+      to { background-position: 100% 0; }
+    }
+
+    .controls {
+      margin-top: 20px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 11px 14px;
+      font-size: 0.97rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 120ms ease, filter 120ms ease;
+    }
+
+    button:hover {
+      filter: brightness(1.02);
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    .btn-primary {
+      background: var(--button-bg);
+      color: var(--button-text);
+    }
+
+    .btn-secondary {
+      background: var(--button-muted-bg);
+      color: var(--button-muted-text);
+    }
+
+    .meta {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .stat-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      background: #fff;
+    }
+
+    .stat-label {
+      margin: 0;
+      font-size: 0.82rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .stat-value {
+      margin: 4px 0 0;
+      font-size: 1.5rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .notify-row {
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .keyboard-note {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 560px) {
+      .app {
+        padding: 20px;
+      }
+
+      .header {
+        flex-direction: column;
+      }
+
+      .controls,
+      .meta {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="Pomodoro timer app">
+    <section class="header">
+      <div>
+        <h1>Pomodoro Timer</h1>
+        <p class="subline">Manual flow, local-first, work-laptop friendly.</p>
+      </div>
+      <div class="preset-group" role="group" aria-label="Select pomodoro preset">
+        <button type="button" class="preset-btn" data-preset="25_5" aria-pressed="true">25 / 5</button>
+        <button type="button" class="preset-btn" data-preset="50_10" aria-pressed="false">50 / 10</button>
+      </div>
+    </section>
+
+    <section id="timerShell" class="timer-shell phase-work" aria-live="polite">
+      <p id="phaseLabel" class="phase-label">Work</p>
+      <p id="timeDisplay" class="timer">25:00</p>
+      <p id="phaseNote" class="phase-note">Press start to begin your work session.</p>
+      <div class="progress-wrap" aria-hidden="true">
+        <div class="progress-track">
+          <div id="progressFill" class="progress-fill"></div>
+        </div>
+      </div>
+      <span class="sr-only" id="liveAnnounce" aria-live="assertive"></span>
+    </section>
+
+    <section class="controls" aria-label="Timer controls">
+      <button id="startPauseBtn" type="button" class="btn-primary">Start</button>
+      <button id="resetBtn" type="button" class="btn-secondary">Reset</button>
+      <button id="switchPhaseBtn" type="button" class="btn-secondary">Switch Phase</button>
+      <button id="enableNotifyBtn" type="button" class="btn-secondary">Enable Notifications</button>
+    </section>
+
+    <section class="meta" aria-label="Session stats">
+      <article class="stat-card">
+        <p class="stat-label">Work Sessions Completed</p>
+        <p id="workCount" class="stat-value">0</p>
+      </article>
+      <article class="stat-card">
+        <p class="stat-label">Break Sessions Completed</p>
+        <p id="breakCount" class="stat-value">0</p>
+      </article>
+    </section>
+
+    <div class="notify-row">
+      <strong>Notification Status:</strong>
+      <span id="notifyStatus">Not requested</span>
+    </div>
+
+    <p class="keyboard-note">Shortcuts: <kbd>Space</kbd> start/pause, <kbd>R</kbd> reset, <kbd>S</kbd> switch phase.</p>
+  </main>
+
+  <script>
+    (function () {
+      const SETTINGS_KEY = "pomodoro.v1.settings";
+      const STATS_KEY = "pomodoro.v1.stats";
+
+      const PRESETS = {
+        "25_5": { work: 25 * 60, break: 5 * 60, label: "25 / 5" },
+        "50_10": { work: 50 * 60, break: 10 * 60, label: "50 / 10" }
+      };
+
+      const ui = {
+        timerShell: document.getElementById("timerShell"),
+        phaseLabel: document.getElementById("phaseLabel"),
+        timeDisplay: document.getElementById("timeDisplay"),
+        phaseNote: document.getElementById("phaseNote"),
+        progressFill: document.getElementById("progressFill"),
+        liveAnnounce: document.getElementById("liveAnnounce"),
+        startPauseBtn: document.getElementById("startPauseBtn"),
+        resetBtn: document.getElementById("resetBtn"),
+        switchPhaseBtn: document.getElementById("switchPhaseBtn"),
+        enableNotifyBtn: document.getElementById("enableNotifyBtn"),
+        workCount: document.getElementById("workCount"),
+        breakCount: document.getElementById("breakCount"),
+        notifyStatus: document.getElementById("notifyStatus"),
+        presetButtons: Array.from(document.querySelectorAll(".preset-btn"))
+      };
+
+      const state = {
+        preset: "25_5",
+        phase: "work",
+        isRunning: false,
+        remainingSeconds: PRESETS["25_5"].work,
+        workDurationSeconds: PRESETS["25_5"].work,
+        breakDurationSeconds: PRESETS["25_5"].break,
+        workCompleted: 0,
+        breakCompleted: 0,
+        lastTickEpochMs: null,
+        timerId: null,
+        audioContext: null,
+        unlockedAudio: false
+      };
+
+      function parseJson(value, fallback) {
+        if (!value) return fallback;
+        try {
+          return JSON.parse(value);
+        } catch (_) {
+          return fallback;
+        }
+      }
+
+      function loadState() {
+        const savedSettings = parseJson(localStorage.getItem(SETTINGS_KEY), null);
+        if (savedSettings && PRESETS[savedSettings.preset]) {
+          state.preset = savedSettings.preset;
+        }
+
+        const savedStats = parseJson(localStorage.getItem(STATS_KEY), null);
+        if (savedStats) {
+          state.workCompleted = Number.isFinite(savedStats.workCompleted) ? Math.max(0, savedStats.workCompleted) : 0;
+          state.breakCompleted = Number.isFinite(savedStats.breakCompleted) ? Math.max(0, savedStats.breakCompleted) : 0;
+        }
+
+        applyPreset(state.preset, { resetPhase: true, persist: false });
+      }
+
+      function saveSettings() {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify({ preset: state.preset }));
+      }
+
+      function saveStats() {
+        localStorage.setItem(STATS_KEY, JSON.stringify({
+          workCompleted: state.workCompleted,
+          breakCompleted: state.breakCompleted
+        }));
+      }
+
+      function getPhaseDuration(phase) {
+        return phase === "work" ? state.workDurationSeconds : state.breakDurationSeconds;
+      }
+
+      function formatTime(seconds) {
+        const safe = Math.max(0, seconds);
+        const mins = String(Math.floor(safe / 60)).padStart(2, "0");
+        const secs = String(safe % 60).padStart(2, "0");
+        return `${mins}:${secs}`;
+      }
+
+      function updateNotificationStatus() {
+        if (!("Notification" in window)) {
+          ui.notifyStatus.textContent = "Unsupported in this browser";
+          ui.enableNotifyBtn.disabled = true;
+          return;
+        }
+
+        const permission = Notification.permission;
+        if (permission === "granted") {
+          ui.notifyStatus.textContent = "Enabled";
+          ui.enableNotifyBtn.disabled = true;
+        } else if (permission === "denied") {
+          ui.notifyStatus.textContent = "Blocked (browser setting)";
+          ui.enableNotifyBtn.disabled = true;
+        } else {
+          ui.notifyStatus.textContent = "Not requested";
+          ui.enableNotifyBtn.disabled = false;
+        }
+      }
+
+      function render() {
+        ui.phaseLabel.textContent = state.phase === "work" ? "Work" : "Break";
+        ui.timeDisplay.textContent = formatTime(state.remainingSeconds);
+        ui.workCount.textContent = String(state.workCompleted);
+        ui.breakCount.textContent = String(state.breakCompleted);
+        ui.startPauseBtn.textContent = state.isRunning ? "Pause" : "Start";
+        document.title = `Pomodoro Timer (${formatTime(state.remainingSeconds)})`;
+
+        const presetText = PRESETS[state.preset].label;
+        if (state.remainingSeconds === 0) {
+          ui.phaseNote.textContent = `${state.phase === "work" ? "Work" : "Break"} phase complete. Switch phase when ready.`;
+        } else if (state.isRunning) {
+          ui.phaseNote.textContent = `${state.phase === "work" ? "Focus" : "Recover"} in progress (${presetText}).`;
+        } else {
+          ui.phaseNote.textContent = `${state.phase === "work" ? "Work" : "Break"} ready (${presetText}).`;
+        }
+
+        ui.timerShell.classList.remove("phase-work", "phase-break");
+        ui.timerShell.classList.add(state.phase === "work" ? "phase-work" : "phase-break");
+
+        const phaseDuration = getPhaseDuration(state.phase);
+        const elapsed = Math.max(0, phaseDuration - state.remainingSeconds);
+        const percent = phaseDuration > 0 ? Math.min(100, Math.max(0, (elapsed / phaseDuration) * 100)) : 0;
+        ui.progressFill.style.width = `${percent}%`;
+        ui.progressFill.classList.toggle("break", state.phase === "break");
+
+        ui.presetButtons.forEach((btn) => {
+          const isActive = btn.dataset.preset === state.preset;
+          btn.setAttribute("aria-pressed", String(isActive));
+        });
+
+        updateNotificationStatus();
+      }
+
+      function stopTimer() {
+        state.isRunning = false;
+        state.lastTickEpochMs = null;
+        if (state.timerId !== null) {
+          clearInterval(state.timerId);
+          state.timerId = null;
+        }
+      }
+
+      function announce(message) {
+        ui.liveAnnounce.textContent = message;
+      }
+
+      function ensureAudioContext() {
+        if (!state.audioContext) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) {
+            state.audioContext = new AudioCtx();
+          }
+        }
+
+        if (state.audioContext && state.audioContext.state === "suspended") {
+          state.audioContext.resume().catch(() => {});
+        }
+
+        state.unlockedAudio = !!state.audioContext;
+      }
+
+      function beep() {
+        if (!state.audioContext || state.audioContext.state !== "running") return;
+
+        const ctx = state.audioContext;
+        const gain = ctx.createGain();
+        const osc = ctx.createOscillator();
+
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.26);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.28);
+      }
+
+      function notify(phaseEnded) {
+        if (!("Notification" in window)) return;
+        if (Notification.permission !== "granted") return;
+
+        const nextPhase = phaseEnded === "work" ? "break" : "work";
+        const title = `${phaseEnded === "work" ? "Work" : "Break"} complete`;
+        const body = `Time for ${nextPhase === "work" ? "focus" : "a break"}.`;
+
+        try {
+          new Notification(title, { body, tag: "pomodoro-phase-change" });
+        } catch (_) {
+          // Notification failures should never break timer behavior.
+        }
+      }
+
+      function flashCompleteState() {
+        ui.timerShell.classList.add("phase-complete");
+        window.setTimeout(() => {
+          ui.timerShell.classList.remove("phase-complete");
+        }, 1800);
+      }
+
+      function completePhase() {
+        const endedPhase = state.phase;
+        const nextPhase = endedPhase === "work" ? "break" : "work";
+        stopTimer();
+
+        if (endedPhase === "work") {
+          state.workCompleted += 1;
+        } else {
+          state.breakCompleted += 1;
+        }
+
+        state.phase = nextPhase;
+        state.remainingSeconds = getPhaseDuration(state.phase);
+
+        saveStats();
+        flashCompleteState();
+        beep();
+        notify(endedPhase);
+        announce(`${endedPhase === "work" ? "Work" : "Break"} complete. ${nextPhase === "work" ? "Work" : "Break"} is ready.`);
+        render();
+      }
+
+      function tick() {
+        if (!state.isRunning) return;
+
+        const now = Date.now();
+        if (state.lastTickEpochMs === null) {
+          state.lastTickEpochMs = now;
+          return;
+        }
+
+        const elapsedMs = now - state.lastTickEpochMs;
+        const elapsedWholeSeconds = Math.floor(elapsedMs / 1000);
+
+        if (elapsedWholeSeconds <= 0) return;
+
+        state.remainingSeconds -= elapsedWholeSeconds;
+        state.lastTickEpochMs += elapsedWholeSeconds * 1000;
+
+        if (state.remainingSeconds <= 0) {
+          completePhase();
+          return;
+        }
+
+        render();
+      }
+
+      function startTimer() {
+        if (state.isRunning) return;
+        if (state.remainingSeconds <= 0) {
+          state.remainingSeconds = getPhaseDuration(state.phase);
+        }
+
+        ensureAudioContext();
+        state.isRunning = true;
+        state.lastTickEpochMs = Date.now();
+        if (state.timerId === null) {
+          state.timerId = window.setInterval(tick, 250);
+        }
+        render();
+      }
+
+      function pauseTimer() {
+        if (!state.isRunning) return;
+        stopTimer();
+        render();
+      }
+
+      function resetCurrentPhase() {
+        stopTimer();
+        state.remainingSeconds = getPhaseDuration(state.phase);
+        announce(`${state.phase === "work" ? "Work" : "Break"} timer reset.`);
+        render();
+      }
+
+      function switchPhase() {
+        stopTimer();
+        state.phase = state.phase === "work" ? "break" : "work";
+        state.remainingSeconds = getPhaseDuration(state.phase);
+        announce(`Switched to ${state.phase} phase.`);
+        render();
+      }
+
+      function applyPreset(nextPreset, options) {
+        const { resetPhase, persist } = options;
+        if (!PRESETS[nextPreset]) return;
+
+        state.preset = nextPreset;
+        state.workDurationSeconds = PRESETS[nextPreset].work;
+        state.breakDurationSeconds = PRESETS[nextPreset].break;
+
+        if (resetPhase) {
+          stopTimer();
+          state.phase = "work";
+          state.remainingSeconds = state.workDurationSeconds;
+        } else {
+          state.remainingSeconds = getPhaseDuration(state.phase);
+        }
+
+        if (persist) {
+          saveSettings();
+        }
+
+        announce(`Preset changed to ${PRESETS[nextPreset].label}.`);
+        render();
+      }
+
+      function requestNotificationPermission() {
+        ensureAudioContext();
+
+        if (!("Notification" in window)) {
+          updateNotificationStatus();
+          return;
+        }
+
+        Notification.requestPermission().then(() => {
+          updateNotificationStatus();
+        }).catch(() => {
+          updateNotificationStatus();
+        });
+      }
+
+      function handleKeyboardShortcuts(event) {
+        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : "";
+        if (activeTag === "input" || activeTag === "textarea" || activeTag === "select") {
+          return;
+        }
+
+        if (event.code === "Space") {
+          event.preventDefault();
+          state.isRunning ? pauseTimer() : startTimer();
+        } else if (event.key.toLowerCase() === "r") {
+          event.preventDefault();
+          resetCurrentPhase();
+        } else if (event.key.toLowerCase() === "s") {
+          event.preventDefault();
+          switchPhase();
+        }
+      }
+
+      function attachEvents() {
+        ui.startPauseBtn.addEventListener("click", () => {
+          ensureAudioContext();
+          state.isRunning ? pauseTimer() : startTimer();
+        });
+
+        ui.resetBtn.addEventListener("click", () => {
+          ensureAudioContext();
+          resetCurrentPhase();
+        });
+
+        ui.switchPhaseBtn.addEventListener("click", () => {
+          ensureAudioContext();
+          switchPhase();
+        });
+
+        ui.enableNotifyBtn.addEventListener("click", requestNotificationPermission);
+
+        ui.presetButtons.forEach((button) => {
+          button.addEventListener("click", () => {
+            const nextPreset = button.dataset.preset;
+            applyPreset(nextPreset, { resetPhase: true, persist: true });
+          });
+        });
+
+        document.addEventListener("keydown", handleKeyboardShortcuts);
+      }
+
+      loadState();
+      attachEvents();
+      render();
+    })();
+  </script>
+</body>
+</html>
