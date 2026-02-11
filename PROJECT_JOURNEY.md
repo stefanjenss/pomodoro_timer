@@ -78,13 +78,42 @@ Build a local-first pomodoro timer that can run in constrained environments (inc
   - Build/test on `localhost`.
   - Keep `file://` compatibility for work-machine usage.
 
+## 2026-02-07
+
+### Summary
+
+- Major V2 release with 10 improvements: dark mode, custom timers, sound customization, long breaks, session history, data export/import, favicon, localStorage safety, tick optimization, and test coverage.
+- Extracted JavaScript into a separate `pomodoro.js` file to enable unit testing.
+
+### Features
+
+- Added: Dark mode with three-way toggle (system/light/dark), respects `prefers-color-scheme`.
+- Added: Custom timer durations via a third "Custom" preset button with configurable work/break minutes (1-120 / 1-60).
+- Added: Sound customization with 4 tone options (single beep, gentle chime, double beep, descending tone, none) and volume slider.
+- Added: Long break support — configurable longer break (default 15 min) automatically triggered every N work sessions (default 4).
+- Added: Session history with timestamped records, today's summary (work count, break count, focus minutes), and a collapsible 7-day view.
+- Added: JSON data export/import for backup and migration across browsers.
+- Added: Dynamic SVG favicon that changes color based on current phase (red for work, green for break).
+- Updated: Timer tick interval reduced from 250ms to 1000ms for better battery efficiency. Elapsed-time correction preserves accuracy.
+- Updated: All `localStorage.setItem`/`getItem` calls wrapped in `safeSetItem`/`safeGetItem` with try/catch for private browsing and quota handling.
+- Updated: CSS hardcoded colors replaced with CSS custom properties (`--surface`, `--track-bg`, `--track-border`) for theme support.
+
+### Decisions
+
+- Decision: Extract JS to `pomodoro.js` rather than keeping everything inline.
+- Reason: Enables shared loading from both `index.html` and `tests.html`. Still works from `file://` with no build step.
+- Decision: Use conditional test export (`window.__POMODORO_TEST_HARNESS__`) rather than always exposing internals.
+- Reason: Zero global leakage in production; test file sets the flag before loading the script.
+
+### Follow-ups
+
+- Next: GitHub-style heatmap for focus sessions.
+- Next: Dashboard views with charts.
+
 ## Next Candidates (Backlog)
 
-- Theme customization pass.
-- Historical session log.
 - Dashboard views.
 - GitHub-style heatmap for focus sessions.
-- Optional data export/import.
 
 ## Entry Template (Append for New Updates)
 

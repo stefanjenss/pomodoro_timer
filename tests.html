@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Pomodoro Timer — Unit Tests</title>
+    <style>
+        body { font-family: "Avenir Next", "Segoe UI", monospace; padding: 20px; background: #fafbfc; color: #1f2933; }
+        h1 { margin-top: 0; }
+        .pass { color: #2f855a; }
+        .fail { color: #c44536; font-weight: bold; }
+        .summary { margin-top: 20px; font-size: 1.2em; font-weight: bold; padding: 12px; border-radius: 8px; }
+        .summary.all-pass { background: #e6ffed; color: #2f855a; }
+        .summary.has-fail { background: #ffeef0; color: #c44536; }
+        .group { margin-top: 16px; font-weight: bold; font-size: 1.05em; color: #334e68; }
+    </style>
+</head>
+<body>
+    <h1>Pomodoro Timer — Unit Tests</h1>
+    <div id="results"></div>
+
+    <!-- Test harness flag must be set BEFORE loading pomodoro.js -->
+    <script>window.__POMODORO_TEST_HARNESS__ = true;</script>
+
+    <!-- Minimal DOM stubs (hidden) so the ui object initializes -->
+    <main class="app" style="display:none;">
+        <link id="favicon" rel="icon">
+        <div id="timerShell" class="timer-shell phase-work">
+            <p id="phaseLabel"></p>
+            <p id="timeDisplay"></p>
+            <p id="phaseNote"></p>
+            <div class="progress-track"><div id="progressFill" class="progress-fill"></div></div>
+            <span id="liveAnnounce"></span>
+        </div>
+        <button id="startPauseBtn"></button>
+        <button id="resetBtn"></button>
+        <button id="switchPhaseBtn"></button>
+        <button id="enableNotifyBtn"></button>
+        <p id="workCount"></p>
+        <p id="breakCount"></p>
+        <span id="notifyStatus"></span>
+        <button class="preset-btn" data-preset="25_5">25/5</button>
+        <button class="preset-btn" data-preset="50_10">50/10</button>
+        <button class="preset-btn" data-preset="custom">Custom</button>
+        <button id="darkModeBtn"></button>
+        <div id="customPresetUI">
+            <input id="customWorkMin" type="number" value="25">
+            <input id="customBreakMin" type="number" value="5">
+            <button id="applyCustomBtn"></button>
+        </div>
+        <select id="soundSelect"><option value="beep">Beep</option><option value="gentle">Gentle</option><option value="none">None</option></select>
+        <input id="volumeSlider" type="range" value="50">
+        <span id="volumeDisplay"></span>
+        <button id="previewSoundBtn"></button>
+        <input id="longBreakInterval" type="number" value="4">
+        <input id="longBreakDuration" type="number" value="15">
+        <div id="todaySummary"></div>
+        <div id="weeklySummary"></div>
+        <button id="exportBtn"></button>
+        <button id="importBtn"></button>
+        <input id="importFile" type="file">
+    </main>
+
+    <!-- Load the app (test export will populate window.__pomodoro) -->
+    <script src="pomodoro.js"></script>
+
+    <script>
+        // --- Minimal test framework ---
+        var results = document.getElementById("results");
+        var passed = 0;
+        var failed = 0;
+
+        function group(name) {
+            results.innerHTML += '<p class="group">' + name + "</p>";
+        }
+
+        function assert(condition, message) {
+            if (condition) {
+                passed++;
+                results.innerHTML += '<p class="pass">&#10003; ' + message + "</p>";
+            } else {
+                failed++;
+                results.innerHTML += '<p class="fail">&#10007; ' + message + "</p>";
+            }
+        }
+
+        function assertEqual(actual, expected, message) {
+            var pass = actual === expected;
+            if (pass) {
+                passed++;
+                results.innerHTML += '<p class="pass">&#10003; ' + message + "</p>";
+            } else {
+                failed++;
+                results.innerHTML += '<p class="fail">&#10007; ' + message + " (expected: " + JSON.stringify(expected) + ", got: " + JSON.stringify(actual) + ")</p>";
+            }
+        }
+
+        // --- Get exposed internals ---
+        var app = window.__pomodoro;
+        if (!app) {
+            results.innerHTML = '<p class="fail">FATAL: window.__pomodoro not available. Test harness failed to load.</p>';
+        } else {
+
+            // ========================
+            // formatTime
+            // ========================
+            group("formatTime");
+            assertEqual(app.formatTime(0), "00:00", "formatTime(0)");
+            assertEqual(app.formatTime(61), "01:01", "formatTime(61)");
+            assertEqual(app.formatTime(1500), "25:00", "formatTime(1500)");
+            assertEqual(app.formatTime(3599), "59:59", "formatTime(3599)");
+            assertEqual(app.formatTime(-5), "00:00", "formatTime(-5) clamps to 00:00");
+            assertEqual(app.formatTime(3600), "60:00", "formatTime(3600)");
+
+            // ========================
+            // parseJson
+            // ========================
+            group("parseJson");
+            assertEqual(app.parseJson(null, "default"), "default", "parseJson null returns fallback");
+            assertEqual(app.parseJson("", "fb"), "fb", "parseJson empty string returns fallback");
+            assertEqual(app.parseJson("invalid json!", "fb"), "fb", "parseJson invalid returns fallback");
+            assertEqual(app.parseJson('{"a":1}', null).a, 1, "parseJson valid JSON parses correctly");
+            assertEqual(app.parseJson("42", null), 42, "parseJson number string");
+
+            // ========================
+            // safeGetItem / safeSetItem
+            // ========================
+            group("safeGetItem / safeSetItem");
+            var testKey = "pomodoro.test.key";
+            assert(app.safeSetItem(testKey, "hello") === true, "safeSetItem returns true on success");
+            assertEqual(app.safeGetItem(testKey), "hello", "safeGetItem retrieves stored value");
+            try { localStorage.removeItem(testKey); } catch(e) {}
+
+            // ========================
+            // getPhaseDuration
+            // ========================
+            group("getPhaseDuration");
+            app.state.workDurationSeconds = 1500;
+            app.state.breakDurationSeconds = 300;
+            app.state.isLongBreak = false;
+            assertEqual(app.getPhaseDuration("work"), 1500, "getPhaseDuration work = 1500");
+            assertEqual(app.getPhaseDuration("break"), 300, "getPhaseDuration break = 300");
+
+            app.state.isLongBreak = true;
+            app.state.longBreakDurationSeconds = 900;
+            assertEqual(app.getPhaseDuration("break"), 900, "getPhaseDuration long break = 900");
+            assertEqual(app.getPhaseDuration("work"), 1500, "getPhaseDuration work unaffected by isLongBreak");
+            app.state.isLongBreak = false;
+
+            // ========================
+            // PRESETS
+            // ========================
+            group("PRESETS");
+            assertEqual(app.PRESETS["25_5"].work, 1500, "PRESETS 25_5 work = 1500");
+            assertEqual(app.PRESETS["25_5"].break, 300, "PRESETS 25_5 break = 300");
+            assertEqual(app.PRESETS["50_10"].work, 3000, "PRESETS 50_10 work = 3000");
+            assertEqual(app.PRESETS["50_10"].break, 600, "PRESETS 50_10 break = 600");
+            assert(app.PRESETS["custom"] !== undefined, "PRESETS custom exists");
+
+            // ========================
+            // switchPhase
+            // ========================
+            group("switchPhase");
+            app.state.phase = "work";
+            app.state.isRunning = false;
+            app.state.workDurationSeconds = 1500;
+            app.state.breakDurationSeconds = 300;
+            app.switchPhase();
+            assertEqual(app.state.phase, "break", "switchPhase work -> break");
+            assertEqual(app.state.remainingSeconds, 300, "switchPhase sets correct break duration");
+            app.switchPhase();
+            assertEqual(app.state.phase, "work", "switchPhase break -> work");
+            assertEqual(app.state.remainingSeconds, 1500, "switchPhase sets correct work duration");
+
+            // ========================
+            // applyPreset
+            // ========================
+            group("applyPreset");
+            app.applyPreset("25_5", {resetPhase: true, persist: false});
+            assertEqual(app.state.workDurationSeconds, 1500, "applyPreset 25_5 work = 1500");
+            assertEqual(app.state.breakDurationSeconds, 300, "applyPreset 25_5 break = 300");
+            assertEqual(app.state.phase, "work", "applyPreset resets to work phase");
+            assertEqual(app.state.remainingSeconds, 1500, "applyPreset sets remaining to work duration");
+
+            app.applyPreset("50_10", {resetPhase: true, persist: false});
+            assertEqual(app.state.workDurationSeconds, 3000, "applyPreset 50_10 work = 3000");
+            assertEqual(app.state.breakDurationSeconds, 600, "applyPreset 50_10 break = 600");
+
+            // Reset for following tests
+            app.applyPreset("25_5", {resetPhase: true, persist: false});
+
+            // ========================
+            // tick
+            // ========================
+            group("tick");
+            app.state.isRunning = true;
+            app.state.remainingSeconds = 100;
+            app.state.phase = "work";
+            app.state.lastTickEpochMs = Date.now() - 2000; // 2 seconds ago
+            app.tick();
+            assert(app.state.remainingSeconds <= 98, "tick decrements by elapsed seconds");
+            assert(app.state.remainingSeconds >= 96, "tick doesn't over-decrement");
+            app.stopTimer();
+
+            // Tick with no elapsed time should not decrement
+            app.state.isRunning = true;
+            app.state.remainingSeconds = 50;
+            app.state.lastTickEpochMs = Date.now(); // just now
+            app.tick();
+            assertEqual(app.state.remainingSeconds, 50, "tick with 0 elapsed does not decrement");
+            app.stopTimer();
+
+            // ========================
+            // completePhase
+            // ========================
+            group("completePhase");
+            app.applyPreset("25_5", {resetPhase: true, persist: false});
+            app.state.workCompleted = 0;
+            app.state.breakCompleted = 0;
+            app.state.consecutiveWorkSessions = 0;
+            app.state.longBreakInterval = 4;
+            app.state.longBreakDurationSeconds = 900;
+            app.state.sessionHistory = [];
+            app.state.phase = "work";
+            app.state.isRunning = false;
+            app.state.remainingSeconds = 0;
+
+            app.completePhase();
+            assertEqual(app.state.workCompleted, 1, "completePhase increments workCompleted");
+            assertEqual(app.state.phase, "break", "completePhase switches to break");
+            assertEqual(app.state.consecutiveWorkSessions, 1, "completePhase increments consecutive count");
+            assert(app.state.sessionHistory.length >= 1, "completePhase records session history");
+            assertEqual(app.state.sessionHistory[app.state.sessionHistory.length - 1].phase, "work", "session record has correct phase");
+
+            // Complete break
+            app.state.remainingSeconds = 0;
+            app.completePhase();
+            assertEqual(app.state.breakCompleted, 1, "completePhase increments breakCompleted");
+            assertEqual(app.state.phase, "work", "completePhase switches back to work");
+
+            // ========================
+            // Long break trigger
+            // ========================
+            group("Long break trigger");
+            app.applyPreset("25_5", {resetPhase: true, persist: false});
+            app.state.workCompleted = 0;
+            app.state.breakCompleted = 0;
+            app.state.consecutiveWorkSessions = 0;
+            app.state.longBreakInterval = 3;
+            app.state.longBreakDurationSeconds = 900;
+            app.state.sessionHistory = [];
+
+            // Complete 3 work sessions to trigger long break
+            for (var i = 0; i < 3; i++) {
+                app.state.phase = "work";
+                app.state.remainingSeconds = 0;
+                app.completePhase();
+                if (app.state.phase === "break") {
+                    // Complete the break to get back to work (unless it's the last one)
+                    if (i < 2) {
+                        app.state.remainingSeconds = 0;
+                        app.completePhase();
+                    }
+                }
+            }
+
+            assert(app.state.isLongBreak === true, "Long break triggered after 3 consecutive work sessions");
+            assertEqual(app.state.remainingSeconds, 900, "Long break has correct duration (900s)");
+            assertEqual(app.state.consecutiveWorkSessions, 0, "Consecutive counter reset after long break trigger");
+
+            // ========================
+            // getDailySummary / getWeeklySummary
+            // ========================
+            group("getDailySummary / getWeeklySummary");
+            var todayStr = new Date().toISOString().split("T")[0];
+            // sessionHistory was populated by completePhase tests above
+            var summary = app.getDailySummary(todayStr);
+            assert(summary.workCount >= 1, "getDailySummary returns work sessions for today");
+            assert(typeof summary.totalFocusMinutes === "number", "getDailySummary returns focus minutes");
+            assertEqual(summary.date, todayStr, "getDailySummary has correct date");
+
+            var weekly = app.getWeeklySummary();
+            assertEqual(weekly.length, 7, "getWeeklySummary returns 7 days");
+            assertEqual(weekly[6].date, todayStr, "getWeeklySummary last day is today");
+
+            // Empty day should return zeros
+            var emptySummary = app.getDailySummary("2000-01-01");
+            assertEqual(emptySummary.workCount, 0, "getDailySummary empty day has 0 work");
+            assertEqual(emptySummary.breakCount, 0, "getDailySummary empty day has 0 break");
+            assertEqual(emptySummary.totalFocusMinutes, 0, "getDailySummary empty day has 0 focus min");
+
+            // ========================
+            // resetCurrentPhase
+            // ========================
+            group("resetCurrentPhase");
+            app.applyPreset("25_5", {resetPhase: true, persist: false});
+            app.state.remainingSeconds = 500;
+            app.resetCurrentPhase();
+            assertEqual(app.state.remainingSeconds, 1500, "resetCurrentPhase restores full duration");
+            assertEqual(app.state.isRunning, false, "resetCurrentPhase stops timer");
+
+            // ========================
+            // Summary
+            // ========================
+            var summaryEl = document.createElement("p");
+            summaryEl.className = "summary " + (failed === 0 ? "all-pass" : "has-fail");
+            summaryEl.textContent = passed + " passed, " + failed + " failed";
+            results.appendChild(summaryEl);
+        }
+    </script>
+</body>
+</html>
