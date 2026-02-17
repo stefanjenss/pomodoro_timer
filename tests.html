@@ -53,6 +53,7 @@
         <button id="previewSoundBtn"></button>
         <input id="longBreakInterval" type="number" value="4">
         <input id="longBreakDuration" type="number" value="15">
+        <input id="autoStartNextPhase" type="checkbox">
         <div id="todaySummary"></div>
         <div id="weeklySummary"></div>
         <button id="exportBtn"></button>
@@ -188,6 +189,14 @@
             // Reset for following tests
             app.applyPreset("25_5", {resetPhase: true, persist: false});
 
+
+            group("Auto-start setting persistence");
+            localStorage.setItem("pomodoro.v1.autoStartNextPhase", JSON.stringify(true));
+            app.loadState();
+            assertEqual(app.state.autoStartNextPhase, true, "loadState restores auto-start setting");
+            var autoStartToggle = document.getElementById("autoStartNextPhase");
+            assertEqual(autoStartToggle.checked, true, "auto-start toggle reflects loaded setting");
+
             // ========================
             // tick
             // ========================
@@ -273,6 +282,28 @@
             var lastSession = app.state.sessionHistory[app.state.sessionHistory.length - 1];
             assertEqual(lastSession.phase, "break", "Completed long break recorded as break phase");
             assert(lastSession.isLongBreak === true, "Completed long-break history record has isLongBreak=true");
+
+            // ========================
+            // Auto-start next phase
+            // ========================
+            group("Auto-start next phase");
+            app.applyPreset("25_5", {resetPhase: true, persist: false});
+            app.stopTimer();
+            app.state.autoStartNextPhase = false;
+            app.state.phase = "work";
+            app.state.remainingSeconds = 0;
+            app.completePhase();
+            assertEqual(app.state.phase, "break", "completePhase still advances phase when auto-start disabled");
+            assertEqual(app.state.isRunning, false, "next phase is paused by default");
+
+            app.stopTimer();
+            app.state.autoStartNextPhase = true;
+            app.state.phase = "work";
+            app.state.remainingSeconds = 0;
+            app.completePhase();
+            assertEqual(app.state.phase, "break", "completePhase advances phase when auto-start enabled");
+            assertEqual(app.state.isRunning, true, "next phase auto-starts when enabled");
+            app.stopTimer();
 
             // ========================
             // getDailySummary / getWeeklySummary

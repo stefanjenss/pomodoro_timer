@@ -8,6 +8,7 @@
     var SOUND_KEY = "pomodoro.v1.sound";
     var LONGBREAK_KEY = "pomodoro.v1.longbreak";
     var HISTORY_KEY = "pomodoro.v1.history";
+    var AUTO_START_NEXT_PHASE_KEY = "pomodoro.v1.autoStartNextPhase";
 
     var PRESETS = {
         "25_5": {work: 25 * 60, break: 5 * 60, label: "25 / 5"},
@@ -44,6 +45,7 @@
         previewSoundBtn: document.getElementById("previewSoundBtn"),
         longBreakInterval: document.getElementById("longBreakInterval"),
         longBreakDuration: document.getElementById("longBreakDuration"),
+        autoStartNextPhase: document.getElementById("autoStartNextPhase"),
         todaySummary: document.getElementById("todaySummary"),
         weeklySummary: document.getElementById("weeklySummary"),
         exportBtn: document.getElementById("exportBtn"),
@@ -77,6 +79,7 @@
         longBreakInterval: 4,
         longBreakDurationSeconds: 15 * 60,
         isLongBreak: false,
+        autoStartNextPhase: false,
         // Session history
         sessionHistory: [],
         currentSessionStart: null
@@ -260,6 +263,20 @@
         }));
     }
 
+    // --- Auto start setting ---
+
+    function loadAutoStartNextPhaseSetting() {
+        var saved = parseJson(safeGetItem(AUTO_START_NEXT_PHASE_KEY), null);
+        state.autoStartNextPhase = saved === true;
+        if (ui.autoStartNextPhase) {
+            ui.autoStartNextPhase.checked = state.autoStartNextPhase;
+        }
+    }
+
+    function saveAutoStartNextPhaseSetting() {
+        safeSetItem(AUTO_START_NEXT_PHASE_KEY, JSON.stringify(state.autoStartNextPhase));
+    }
+
     // --- Session history ---
 
     function loadHistory() {
@@ -351,9 +368,10 @@
             applyTheme("system");
         }
 
-        // Load sound, long break, history
+        // Load sound, long break, auto start, history
         loadSoundSettings();
         loadLongBreakSettings();
+        loadAutoStartNextPhaseSetting();
         loadHistory();
 
         applyPreset(state.preset, {resetPhase: true, persist: false});
@@ -469,6 +487,10 @@
             ui.darkModeBtn.title = "Theme: " + state.darkMode;
         }
 
+        if (ui.autoStartNextPhase) {
+            ui.autoStartNextPhase.checked = state.autoStartNextPhase;
+        }
+
         updateFavicon(state.phase);
         updateNotificationStatus();
         renderHistory();
@@ -580,6 +602,10 @@
         var nextLabel = nextPhase === "work" ? "Work" : breakLabel;
         announce((endedPhase === "work" ? "Work" : "Break") + " complete. " + nextLabel + " is ready.");
         render();
+
+        if (state.autoStartNextPhase) {
+            startTimer();
+        }
     }
 
     function tick() {
@@ -724,6 +750,7 @@
             theme: safeGetItem(THEME_KEY),
             sound: parseJson(safeGetItem(SOUND_KEY), null),
             longBreak: parseJson(safeGetItem(LONGBREAK_KEY), null),
+            autoStartNextPhase: parseJson(safeGetItem(AUTO_START_NEXT_PHASE_KEY), false),
             history: parseJson(safeGetItem(HISTORY_KEY), [])
         };
         var blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
@@ -750,6 +777,9 @@
                 if (data.theme) safeSetItem(THEME_KEY, data.theme);
                 if (data.sound) safeSetItem(SOUND_KEY, JSON.stringify(data.sound));
                 if (data.longBreak) safeSetItem(LONGBREAK_KEY, JSON.stringify(data.longBreak));
+                if (data.autoStartNextPhase !== undefined) {
+                    safeSetItem(AUTO_START_NEXT_PHASE_KEY, JSON.stringify(!!data.autoStartNextPhase));
+                }
                 if (Array.isArray(data.history)) safeSetItem(HISTORY_KEY, JSON.stringify(data.history));
 
                 stopTimer();
@@ -869,6 +899,13 @@
                 state.longBreakDurationSeconds = mins * 60;
                 ui.longBreakDuration.value = mins;
                 saveLongBreakSettings();
+            });
+        }
+
+        if (ui.autoStartNextPhase) {
+            ui.autoStartNextPhase.addEventListener("change", function () {
+                state.autoStartNextPhase = !!ui.autoStartNextPhase.checked;
+                saveAutoStartNextPhaseSetting();
             });
         }
 
