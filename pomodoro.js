@@ -532,6 +532,7 @@
 
     function completePhase() {
         var endedPhase = state.phase;
+        var wasLongBreak = state.isLongBreak;
         stopTimer();
 
         // Update counters
@@ -540,13 +541,12 @@
             state.consecutiveWorkSessions += 1;
         } else {
             state.breakCompleted += 1;
-            state.isLongBreak = false;
         }
 
         // Record session history
         var sessionRecord = {
             phase: endedPhase,
-            isLongBreak: endedPhase === "break" && state.isLongBreak,
+            isLongBreak: endedPhase === "break" && wasLongBreak,
             durationSeconds: getPhaseDuration(endedPhase),
             startTime: state.currentSessionStart || new Date().toISOString(),
             endTime: new Date().toISOString(),
@@ -562,6 +562,7 @@
         state.phase = nextPhase;
 
         // Check for long break
+        state.isLongBreak = false;
         if (nextPhase === "break" && state.consecutiveWorkSessions >= state.longBreakInterval) {
             state.isLongBreak = true;
             state.consecutiveWorkSessions = 0;

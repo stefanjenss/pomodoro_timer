@@ -267,6 +267,13 @@
             assertEqual(app.state.remainingSeconds, 900, "Long break has correct duration (900s)");
             assertEqual(app.state.consecutiveWorkSessions, 0, "Consecutive counter reset after long break trigger");
 
+            // Complete long break and verify history record preserves long-break flag
+            app.state.remainingSeconds = 0;
+            app.completePhase();
+            var lastSession = app.state.sessionHistory[app.state.sessionHistory.length - 1];
+            assertEqual(lastSession.phase, "break", "Completed long break recorded as break phase");
+            assert(lastSession.isLongBreak === true, "Completed long-break history record has isLongBreak=true");
+
             // ========================
             // getDailySummary / getWeeklySummary
             // ========================
