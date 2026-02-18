@@ -56,6 +56,9 @@
         <input id="autoStartNextPhase" type="checkbox">
         <div id="todaySummary"></div>
         <div id="weeklySummary"></div>
+        <div id="analyticsHeatmap"></div>
+        <div id="analyticsTrend"></div>
+        <div id="analyticsCadence"></div>
         <button id="exportBtn"></button>
         <button id="importBtn"></button>
         <input id="importFile" type="file">
@@ -325,6 +328,45 @@
             assertEqual(emptySummary.workCount, 0, "getDailySummary empty day has 0 work");
             assertEqual(emptySummary.breakCount, 0, "getDailySummary empty day has 0 break");
             assertEqual(emptySummary.totalFocusMinutes, 0, "getDailySummary empty day has 0 focus min");
+
+
+            // ========================
+            // analytics aggregations
+            // ========================
+            group("analytics aggregations");
+            var sampleHistory = [
+                {phase: "work", completed: true, durationSeconds: 1500, startTime: "2026-01-28T09:00:00.000Z"},
+                {phase: "work", completed: true, durationSeconds: 3000, startTime: "2026-01-28T13:00:00.000Z"},
+                {phase: "break", completed: true, isLongBreak: true, durationSeconds: 900, startTime: "2026-01-28T13:30:00.000Z"},
+                {phase: "work", completed: true, durationSeconds: 1500, startTime: "2026-01-29T09:00:00.000Z"},
+                {phase: "work", completed: false, durationSeconds: 1500, startTime: "2026-01-29T10:00:00.000Z"},
+                {phase: "work", completed: true, durationSeconds: 1500, startTime: "2026-01-30T09:00:00.000Z"},
+                {phase: "break", completed: true, isLongBreak: false, durationSeconds: 300, startTime: "2026-01-30T09:30:00.000Z"}
+            ];
+
+            var byDay = app.aggregateFocusMinutesByDay(sampleHistory, 3, "2026-01-30T12:00:00.000Z");
+            assertEqual(byDay.length, 3, "aggregateFocusMinutesByDay returns requested day count");
+            assertEqual(byDay[0].date, "2026-01-28", "aggregateFocusMinutesByDay includes oldest day first");
+            assertEqual(byDay[0].minutes, 75, "aggregateFocusMinutesByDay sums focus minutes for day");
+            assertEqual(byDay[1].minutes, 25, "aggregateFocusMinutesByDay excludes incomplete sessions");
+            assertEqual(byDay[2].minutes, 25, "aggregateFocusMinutesByDay maps most recent day");
+
+            var byHour = app.aggregateSessionsByHour(sampleHistory);
+            assertEqual(byHour.length, 24, "aggregateSessionsByHour returns 24 buckets");
+            assertEqual(byHour[9].count, 3, "aggregateSessionsByHour counts completed sessions at hour");
+            assertEqual(byHour[13].count, 2, "aggregateSessionsByHour counts across phases");
+            assertEqual(byHour[10].count, 0, "aggregateSessionsByHour skips incomplete sessions");
+
+            var cadenceStats = app.aggregateLongBreakCadenceStats(sampleHistory);
+            assertEqual(cadenceStats.completedLongBreaks, 1, "aggregateLongBreakCadenceStats counts long breaks");
+            assertEqual(cadenceStats.averageWorkPerLongBreak, 2, "aggregateLongBreakCadenceStats computes average cycle length");
+            assertEqual(cadenceStats.pendingCycleWorkSessions, 2, "aggregateLongBreakCadenceStats counts current cycle progress");
+
+            assertEqual(app.getHeatmapIntensity(0, 60), 0, "getHeatmapIntensity returns 0 for zero minutes");
+            assertEqual(app.getHeatmapIntensity(12, 60), 1, "getHeatmapIntensity returns low intensity");
+            assertEqual(app.getHeatmapIntensity(20, 60), 2, "getHeatmapIntensity returns medium-low intensity");
+            assertEqual(app.getHeatmapIntensity(40, 60), 3, "getHeatmapIntensity returns medium-high intensity");
+            assertEqual(app.getHeatmapIntensity(55, 60), 4, "getHeatmapIntensity returns highest intensity");
 
             // ========================
             // resetCurrentPhase

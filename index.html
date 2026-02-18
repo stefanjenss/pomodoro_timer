@@ -448,6 +448,78 @@
             margin-top: 8px;
         }
 
+        .analytics-section {
+            margin-top: 14px;
+            border-top: 1px solid var(--border);
+            padding-top: 12px;
+        }
+
+        .analytics-block + .analytics-block {
+            margin-top: 12px;
+        }
+
+        .analytics-block h3 {
+            margin: 0 0 6px;
+            font-size: 0.9rem;
+        }
+
+        .analytics-metrics {
+            margin: 0;
+            padding-left: 18px;
+            color: var(--muted);
+            font-size: 0.84rem;
+        }
+
+        .heatmap-grid {
+            display: grid;
+            grid-template-columns: repeat(10, minmax(0, 1fr));
+            gap: 4px;
+            margin-top: 6px;
+        }
+
+        .heatmap-cell {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            min-height: 22px;
+            font-size: 0.7rem;
+            display: grid;
+            place-items: center;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .heatmap-0 { background: color-mix(in srgb, var(--surface) 94%, var(--break-accent) 6%); }
+        .heatmap-1 { background: color-mix(in srgb, var(--break-accent) 14%, var(--surface) 86%); }
+        .heatmap-2 { background: color-mix(in srgb, var(--break-accent) 30%, var(--surface) 70%); }
+        .heatmap-3 { background: color-mix(in srgb, var(--break-accent) 48%, var(--surface) 52%); }
+        .heatmap-4 { background: color-mix(in srgb, var(--break-accent) 66%, var(--surface) 34%); }
+
+        .trend-rows {
+            margin-top: 8px;
+            display: grid;
+            gap: 6px;
+        }
+
+        .trend-row {
+            display: grid;
+            grid-template-columns: 76px 1fr 68px;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8rem;
+        }
+
+        .trend-bar-track {
+            height: 10px;
+            border: 1px solid var(--track-border);
+            border-radius: 999px;
+            background: var(--track-bg);
+            overflow: hidden;
+        }
+
+        .trend-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #b83b2f, #e07a5f);
+        }
+
         .day-row {
             display: flex;
             justify-content: space-between;
@@ -589,6 +661,13 @@
                 <summary>Last 7 days</summary>
                 <div id="weeklySummary" class="weekly-summary"></div>
             </details>
+
+            <section id="analyticsSection" class="analytics-section" aria-label="Analytics">
+                <h2 class="history-title">Analytics</h2>
+                <div id="analyticsHeatmap" class="analytics-block" aria-live="polite"></div>
+                <div id="analyticsTrend" class="analytics-block" aria-live="polite"></div>
+                <div id="analyticsCadence" class="analytics-block" aria-live="polite"></div>
+            </section>
         </section>
 
         <div class="notify-row">

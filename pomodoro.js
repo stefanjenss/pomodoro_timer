@@ -48,6 +48,9 @@
         autoStartNextPhase: document.getElementById("autoStartNextPhase"),
         todaySummary: document.getElementById("todaySummary"),
         weeklySummary: document.getElementById("weeklySummary"),
+        analyticsHeatmap: document.getElementById("analyticsHeatmap"),
+        analyticsTrend: document.getElementById("analyticsTrend"),
+        analyticsCadence: document.getElementById("analyticsCadence"),
         exportBtn: document.getElementById("exportBtn"),
         importBtn: document.getElementById("importBtn"),
         importFile: document.getElementById("importFile")
@@ -318,6 +321,127 @@
         return days;
     }
 
+    function aggregateFocusMinutesByDay(history, daysBack, nowDate) {
+        var now = nowDate ? new Date(nowDate) : new Date();
+        var dayMap = {};
+
+        (history || []).forEach(function (session) {
+            if (!session || session.phase !== "work" || !session.completed || !session.startTime) return;
+            var key = session.startTime.substring(0, 10);
+            var mins = (Number(session.durationSeconds) || 0) / 60;
+            dayMap[key] = (dayMap[key] || 0) + mins;
+        });
+
+        var days = [];
+        for (var i = daysBack - 1; i >= 0; i--) {
+            var d = new Date(now);
+            d.setHours(12, 0, 0, 0);
+            d.setDate(d.getDate() - i);
+            var dateStr = d.toISOString().split("T")[0];
+            days.push({date: dateStr, minutes: Math.round(dayMap[dateStr] || 0)});
+        }
+        return days;
+    }
+
+    function aggregateSessionsByHour(history) {
+        var buckets = [];
+        for (var i = 0; i < 24; i++) {
+            buckets.push({hour: i, count: 0});
+        }
+
+        (history || []).forEach(function (session) {
+            if (!session || !session.startTime || !session.completed) return;
+            var date = new Date(session.startTime);
+            if (isNaN(date.getTime())) return;
+            buckets[date.getHours()].count += 1;
+        });
+
+        return buckets;
+    }
+
+    function aggregateLongBreakCadenceStats(history) {
+        var workSinceLongBreak = 0;
+        var cycleLengths = [];
+        var completedLongBreaks = 0;
+
+        (history || []).forEach(function (session) {
+            if (!session || !session.completed) return;
+            if (session.phase === "work") {
+                workSinceLongBreak += 1;
+            }
+            if (session.phase === "break" && session.isLongBreak) {
+                completedLongBreaks += 1;
+                cycleLengths.push(workSinceLongBreak);
+                workSinceLongBreak = 0;
+            }
+        });
+
+        var averageWorkPerLongBreak = cycleLengths.length
+            ? Math.round((cycleLengths.reduce(function (sum, c) { return sum + c; }, 0) / cycleLengths.length) * 10) / 10
+            : 0;
+
+        return {
+            completedLongBreaks: completedLongBreaks,
+            pendingCycleWorkSessions: workSinceLongBreak,
+            averageWorkPerLongBreak: averageWorkPerLongBreak,
+            cycleLengths: cycleLengths
+        };
+    }
+
+    function getHeatmapIntensity(minutes, maxMinutes) {
+        if (minutes <= 0 || maxMinutes <= 0) return 0;
+        var ratio = minutes / maxMinutes;
+        if (ratio < 0.25) return 1;
+        if (ratio < 0.5) return 2;
+        if (ratio < 0.75) return 3;
+        return 4;
+    }
+
+    function renderAnalytics() {
+        if (!ui.analyticsHeatmap || !ui.analyticsTrend || !ui.analyticsCadence) return;
+
+        var focus30 = aggregateFocusMinutesByDay(state.sessionHistory, 30);
+        var maxFocus = focus30.reduce(function (max, day) { return Math.max(max, day.minutes); }, 0);
+        var heatCells = focus30.map(function (day) {
+            var intensity = getHeatmapIntensity(day.minutes, maxFocus);
+            return '<div class="heatmap-cell heatmap-' + intensity + '" role="listitem" aria-label="' + day.date + ': ' + day.minutes + ' focus minutes">' + day.minutes + '</div>';
+        }).join("");
+
+        ui.analyticsHeatmap.innerHTML =
+            '<h3>30-day focus heatmap</h3>' +
+            '<p class="subline">Each cell shows focus minutes by day.</p>' +
+            '<div class="heatmap-grid" role="list" aria-label="Last 30 days focus heatmap">' + heatCells + '</div>';
+
+        var trend7 = focus30.slice(-7);
+        var maxTrend = trend7.reduce(function (max, day) { return Math.max(max, day.minutes); }, 0);
+        var trendRows = trend7.map(function (day) {
+            var width = maxTrend > 0 ? Math.max(3, Math.round((day.minutes / maxTrend) * 100)) : 0;
+            return '<div class="trend-row" aria-label="' + day.date + ': ' + day.minutes + ' focus minutes">' +
+                '<span>' + day.date.substring(5) + '</span>' +
+                '<div class="trend-bar-track" aria-hidden="true"><div class="trend-bar-fill" style="width:' + width + '%"></div></div>' +
+                '<span>' + day.minutes + ' min</span>' +
+                '</div>';
+        }).join("");
+
+        ui.analyticsTrend.innerHTML =
+            '<h3>7-day focus trend</h3>' +
+            '<div class="trend-rows">' + trendRows + '</div>';
+
+        var cadence = aggregateLongBreakCadenceStats(state.sessionHistory);
+        var byHour = aggregateSessionsByHour(state.sessionHistory);
+        var peak = byHour.reduce(function (best, b) { return b.count > best.count ? b : best; }, {hour: 0, count: 0});
+        var peakHourLabel = String(peak.hour).padStart(2, "0") + ':00';
+
+        ui.analyticsCadence.innerHTML =
+            '<h3>Long-break cadence</h3>' +
+            '<ul class="analytics-metrics">' +
+            '<li aria-label="Completed long breaks: ' + cadence.completedLongBreaks + '">Completed long breaks: <strong>' + cadence.completedLongBreaks + '</strong></li>' +
+            '<li aria-label="Average work sessions before long break: ' + cadence.averageWorkPerLongBreak + '">Average work sessions before long break: <strong>' + cadence.averageWorkPerLongBreak + '</strong></li>' +
+            '<li aria-label="Current work sessions toward next long break: ' + cadence.pendingCycleWorkSessions + '">Current work sessions toward next long break: <strong>' + cadence.pendingCycleWorkSessions + '</strong></li>' +
+            '<li aria-label="Peak session hour: ' + peakHourLabel + ' with ' + peak.count + ' sessions">Peak session hour: <strong>' + peakHourLabel + '</strong> (' + peak.count + ' sessions)</li>' +
+            '</ul>';
+    }
+
     function renderHistory() {
         if (!ui.todaySummary) return;
 
@@ -494,6 +618,7 @@
         updateFavicon(state.phase);
         updateNotificationStatus();
         renderHistory();
+        renderAnalytics();
     }
 
     // --- Timer control ---
@@ -960,6 +1085,10 @@
             applyPreset: applyPreset,
             getDailySummary: getDailySummary,
             getWeeklySummary: getWeeklySummary,
+            aggregateFocusMinutesByDay: aggregateFocusMinutesByDay,
+            aggregateSessionsByHour: aggregateSessionsByHour,
+            aggregateLongBreakCadenceStats: aggregateLongBreakCadenceStats,
+            getHeatmapIntensity: getHeatmapIntensity,
             render: render,
             playSound: playSound,
             loadState: loadState
