@@ -497,6 +497,7 @@
         loadLongBreakSettings();
         loadAutoStartNextPhaseSetting();
         loadHistory();
+        renderHistory();
 
         applyPreset(state.preset, {resetPhase: true, persist: false});
     }
@@ -703,6 +704,7 @@
         state.sessionHistory.push(sessionRecord);
         state.currentSessionStart = null;
         saveHistory();
+        renderHistory();
 
         // Determine next phase
         var nextPhase = endedPhase === "work" ? "break" : "work";
