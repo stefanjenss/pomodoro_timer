@@ -663,7 +663,9 @@
         var body = "Time for " + (nextPhase === "work" ? "focus" : "a break") + ".";
 
         try {
-            new Notification(title, {body: body, tag: "pomodoro-phase-change"});
+            // Avoid a fixed tag so browsers don't silently replace later
+            // phase-complete notifications with the first one.
+            new Notification(title, {body: body});
         } catch (_) {
             // Notification failures should never break timer behavior.
         }
