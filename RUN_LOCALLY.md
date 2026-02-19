@@ -20,5 +20,5 @@ Run the app through `http://localhost` instead.
 
 ## Notes
 - Optional custom port: `./RUN_THIS.sh 8080` (or `RUN_THIS.bat 8080`)
-- Stop the server with `Ctrl+C` in the terminal window.
+- Stop the server with `Ctrl+C` in the terminal window (or simply quit the terminal that launched the localhost).
 - Requires Python 3 installed.
