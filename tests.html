@@ -54,6 +54,7 @@
         <input id="longBreakInterval" type="number" value="4">
         <input id="longBreakDuration" type="number" value="15">
         <input id="autoStartNextPhase" type="checkbox">
+        <input id="allowFlowState" type="checkbox">
         <div id="todaySummary"></div>
         <div id="weeklySummary"></div>
         <div id="analyticsHeatmap"></div>
@@ -200,6 +201,13 @@
             var autoStartToggle = document.getElementById("autoStartNextPhase");
             assertEqual(autoStartToggle.checked, true, "auto-start toggle reflects loaded setting");
 
+            group("Allow flow state setting persistence");
+            localStorage.setItem("pomodoro.v1.allowFlowState", JSON.stringify(true));
+            app.loadState();
+            assertEqual(app.state.allowFlowState, true, "loadState restores allow-flow-state setting");
+            var allowFlowToggle = document.getElementById("allowFlowState");
+            assertEqual(allowFlowToggle.checked, true, "allow-flow-state toggle reflects loaded setting");
+
             // ========================
             // tick
             // ========================
@@ -219,6 +227,112 @@
             app.state.lastTickEpochMs = Date.now(); // just now
             app.tick();
             assertEqual(app.state.remainingSeconds, 50, "tick with 0 elapsed does not decrement");
+            app.stopTimer();
+
+            // ========================
+            // Flow state overflow
+            // ========================
+            group("Flow state overflow");
+            app.applyPreset("25_5", {resetPhase: true, persist: false});
+            app.stopTimer();
+            app.state.allowFlowState = true;
+            app.state.workCompleted = 0;
+            app.state.breakCompleted = 0;
+            app.state.consecutiveWorkSessions = 0;
+            app.state.longBreakInterval = 4;
+            app.state.phase = "work";
+            app.state.remainingSeconds = 1;
+            app.state.inOverflow = false;
+            app.state.overflowSeconds = 0;
+            app.state.pendingBreakCreditSeconds = 0;
+            app.state.currentSessionStart = "2026-02-18T09:00:00.000Z";
+            app.state.isRunning = true;
+            var realNow = Date.now;
+            Date.now = function () { return 2000; };
+            app.state.lastTickEpochMs = 0;
+            app.tick();
+            Date.now = realNow;
+            assertEqual(app.state.inOverflow, true, "work timer enters overflow at 00:00 when setting enabled");
+            assertEqual(app.state.remainingSeconds, 0, "overflow keeps remaining at 0");
+            assertEqual(app.state.overflowSeconds, 1, "overflow starts counting up with exact overrun");
+
+            // Accumulate additional overflow and verify break-credit ratio (25/5 => 1:5)
+            app.state.isRunning = true;
+            realNow = Date.now;
+            Date.now = function () { return 302000; };
+            app.state.lastTickEpochMs = 2000;
+            app.tick();
+            Date.now = realNow;
+            assertEqual(app.state.overflowSeconds, 301, "overflow increments while running");
+            assertEqual(app.state.pendingBreakCreditSeconds, 60, "overflow credit follows 25/5 ratio");
+
+            app.switchPhase();
+            assertEqual(app.state.phase, "break", "switchPhase exits overflow into break");
+            assertEqual(app.state.isRunning, true, "switchPhase from overflow auto-starts break");
+            assertEqual(app.state.remainingSeconds, 360, "break receives proportional overflow credit");
+            assertEqual(app.state.workCompleted, 1, "overflowed work still counts as one completed work session");
+            assertEqual(app.state.inOverflow, false, "overflow state clears after switch");
+            var overflowWorkRecord = app.state.sessionHistory[app.state.sessionHistory.length - 1];
+            assertEqual(overflowWorkRecord.phase, "work", "overflow transition records completed work session");
+            assertEqual(overflowWorkRecord.durationSeconds, 1801, "work duration includes overflow time");
+            assertEqual(overflowWorkRecord.overflowSeconds, 301, "work history records overflow seconds");
+            app.stopTimer();
+
+            // 50/10 preset ratio should remain 1:5 for break-credit math
+            app.applyPreset("50_10", {resetPhase: true, persist: false});
+            app.stopTimer();
+            app.state.allowFlowState = true;
+            app.state.phase = "work";
+            app.state.remainingSeconds = 1;
+            app.state.inOverflow = false;
+            app.state.overflowSeconds = 0;
+            app.state.pendingBreakCreditSeconds = 0;
+            app.state.isRunning = true;
+            realNow = Date.now;
+            Date.now = function () { return 301000; };
+            app.state.lastTickEpochMs = 0;
+            app.tick();
+            Date.now = realNow;
+            assertEqual(app.state.pendingBreakCreditSeconds, 60, "overflow credit follows 50/10 ratio");
+            app.stopTimer();
+
+            // Custom ratio should use configured work/break durations
+            app.PRESETS.custom.work = 45 * 60;
+            app.PRESETS.custom.break = 7 * 60;
+            app.PRESETS.custom.label = "45 / 7";
+            app.applyPreset("custom", {resetPhase: true, persist: false});
+            app.stopTimer();
+            app.state.allowFlowState = true;
+            app.state.phase = "work";
+            app.state.remainingSeconds = 1;
+            app.state.inOverflow = false;
+            app.state.overflowSeconds = 0;
+            app.state.pendingBreakCreditSeconds = 0;
+            app.state.isRunning = true;
+            realNow = Date.now;
+            Date.now = function () { return 301000; };
+            app.state.lastTickEpochMs = 0;
+            app.tick();
+            Date.now = realNow;
+            assertEqual(app.state.pendingBreakCreditSeconds, 46, "overflow credit uses custom ratio with floor rounding");
+            app.stopTimer();
+
+            // Break phase should never overflow
+            app.applyPreset("25_5", {resetPhase: true, persist: false});
+            app.stopTimer();
+            app.state.allowFlowState = true;
+            app.state.phase = "break";
+            app.state.isLongBreak = false;
+            app.state.remainingSeconds = 1;
+            app.state.inOverflow = false;
+            app.state.isRunning = true;
+            realNow = Date.now;
+            Date.now = function () { return 4000; };
+            app.state.lastTickEpochMs = 0;
+            app.tick();
+            Date.now = realNow;
+            assertEqual(app.state.inOverflow, false, "break completion does not enter overflow");
+            assertEqual(app.state.phase, "work", "break completion still transitions to work");
             app.stopTimer();
 
             // ========================

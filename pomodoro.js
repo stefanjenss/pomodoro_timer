@@ -9,6 +9,7 @@
     var LONGBREAK_KEY = "pomodoro.v1.longbreak";
     var HISTORY_KEY = "pomodoro.v1.history";
     var AUTO_START_NEXT_PHASE_KEY = "pomodoro.v1.autoStartNextPhase";
+    var ALLOW_FLOW_STATE_KEY = "pomodoro.v1.allowFlowState";
 
     var PRESETS = {
         "25_5": {work: 25 * 60, break: 5 * 60, label: "25 / 5"},
@@ -46,6 +47,7 @@
         longBreakInterval: document.getElementById("longBreakInterval"),
         longBreakDuration: document.getElementById("longBreakDuration"),
         autoStartNextPhase: document.getElementById("autoStartNextPhase"),
+        allowFlowState: document.getElementById("allowFlowState"),
         todaySummary: document.getElementById("todaySummary"),
         weeklySummary: document.getElementById("weeklySummary"),
         analyticsHeatmap: document.getElementById("analyticsHeatmap"),
@@ -83,6 +85,10 @@
         longBreakDurationSeconds: 15 * 60,
         isLongBreak: false,
         autoStartNextPhase: false,
+        allowFlowState: false,
+        inOverflow: false,
+        overflowSeconds: 0,
+        pendingBreakCreditSeconds: 0,
         // Session history
         sessionHistory: [],
         currentSessionStart: null
@@ -278,6 +284,24 @@
 
     function saveAutoStartNextPhaseSetting() {
         safeSetItem(AUTO_START_NEXT_PHASE_KEY, JSON.stringify(state.autoStartNextPhase));
+    }
+
+    function loadAllowFlowStateSetting() {
+        var saved = parseJson(safeGetItem(ALLOW_FLOW_STATE_KEY), null);
+        state.allowFlowState = saved === true;
+        if (ui.allowFlowState) {
+            ui.allowFlowState.checked = state.allowFlowState;
+        }
+    }
+
+    function saveAllowFlowStateSetting() {
+        safeSetItem(ALLOW_FLOW_STATE_KEY, JSON.stringify(state.allowFlowState));
+    }
+
+    function clearOverflowState() {
+        state.inOverflow = false;
+        state.overflowSeconds = 0;
+        state.pendingBreakCreditSeconds = 0;
     }
 
     // --- Session history ---
@@ -496,6 +520,7 @@
         loadSoundSettings();
         loadLongBreakSettings();
         loadAutoStartNextPhaseSetting();
+        loadAllowFlowStateSetting();
         loadHistory();
         renderHistory();
 
@@ -523,9 +548,9 @@
 
     // --- Favicon ---
 
-    function updateFavicon(phase) {
+    function updateFavicon(phase, inOverflow) {
         if (!ui.favicon) return;
-        var color = phase === "work" ? "%23c44536" : "%232f855a";
+        var color = inOverflow ? "%23089ec4" : (phase === "work" ? "%23c44536" : "%232f855a");
         ui.favicon.href = "data:image/svg+xml," +
             "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>" +
             "<circle cx='50' cy='55' r='42' fill='" + color + "'/>" +
@@ -569,16 +594,18 @@
     // --- Rendering ---
 
     function render() {
-        var phaseLabel = state.phase === "work" ? "Work" : (state.isLongBreak ? "Long Break" : "Break");
+        var phaseLabel = state.inOverflow ? "Flow State" : (state.phase === "work" ? "Work" : (state.isLongBreak ? "Long Break" : "Break"));
         ui.phaseLabel.textContent = phaseLabel;
-        ui.timeDisplay.textContent = formatTime(state.remainingSeconds);
+        ui.timeDisplay.textContent = state.inOverflow ? ("+" + formatTime(state.overflowSeconds)) : formatTime(state.remainingSeconds);
         ui.workCount.textContent = String(state.workCompleted);
         ui.breakCount.textContent = String(state.breakCompleted);
         ui.startPauseBtn.textContent = state.isRunning ? "Pause" : "Start";
-        document.title = "Pomodoro Timer (" + formatTime(state.remainingSeconds) + ")";
+        document.title = "Pomodoro Timer (" + (state.inOverflow ? ("+" + formatTime(state.overflowSeconds)) : formatTime(state.remainingSeconds)) + ")";
 
         var presetText = PRESETS[state.preset].label;
-        if (state.remainingSeconds === 0) {
+        if (state.inOverflow) {
+            ui.phaseNote.textContent = "In flow. Switch to break when ready. Break credit accumulating.";
+        } else if (state.remainingSeconds === 0) {
             ui.phaseNote.textContent = phaseLabel + " phase complete. Switch phase when ready.";
         } else if (state.isRunning) {
             ui.phaseNote.textContent = (state.phase === "work" ? "Focus" : "Recover") + " in progress (" + presetText + ").";
@@ -586,14 +613,18 @@
             ui.phaseNote.textContent = phaseLabel + " ready (" + presetText + ").";
         }
 
-        ui.timerShell.classList.remove("phase-work", "phase-break");
+        ui.timerShell.classList.remove("phase-work", "phase-break", "phase-overflow");
         ui.timerShell.classList.add(state.phase === "work" ? "phase-work" : "phase-break");
+        if (state.inOverflow) {
+            ui.timerShell.classList.add("phase-overflow");
+        }
 
         var phaseDuration = getPhaseDuration(state.phase);
         var elapsed = Math.max(0, phaseDuration - state.remainingSeconds);
-        var percent = phaseDuration > 0 ? Math.min(100, Math.max(0, (elapsed / phaseDuration) * 100)) : 0;
+        var percent = state.inOverflow ? 100 : (phaseDuration > 0 ? Math.min(100, Math.max(0, (elapsed / phaseDuration) * 100)) : 0);
         ui.progressFill.style.width = percent + "%";
         ui.progressFill.classList.toggle("break", state.phase === "break");
+        ui.progressFill.classList.toggle("overflow", state.inOverflow);
 
         ui.presetButtons.forEach(function (btn) {
             var isActive = btn.dataset.preset === state.preset;
@@ -615,8 +646,11 @@
         if (ui.autoStartNextPhase) {
             ui.autoStartNextPhase.checked = state.autoStartNextPhase;
         }
+        if (ui.allowFlowState) {
+            ui.allowFlowState.checked = state.allowFlowState;
+        }
 
-        updateFavicon(state.phase);
+        updateFavicon(state.phase, state.inOverflow);
         updateNotificationStatus();
         renderHistory();
         renderAnalytics();
@@ -680,9 +714,16 @@
 
     // --- Phase transitions ---
 
-    function completePhase() {
+    function completePhase(options) {
+        if (!options) options = {};
         var endedPhase = state.phase;
         var wasLongBreak = state.isLongBreak;
+        var overflowSeconds = endedPhase === "work" ? Math.max(0, Math.floor(options.overflowSeconds || 0)) : 0;
+        var sessionDuration = Number.isFinite(options.sessionDurationSeconds) ? Math.max(0, Math.floor(options.sessionDurationSeconds)) : getPhaseDuration(endedPhase);
+        var bonusBreakSeconds = Math.max(0, Math.floor(options.bonusBreakSeconds || 0));
+        var suppressSignals = options.suppressSignals === true;
+        var shouldForceStartNext = options.forceStartNextPhase === true;
+        var customAnnouncement = typeof options.announcement === "string" ? options.announcement : "";
         stopTimer();
 
         // Update counters
@@ -697,12 +738,15 @@
         var sessionRecord = {
             phase: endedPhase,
             isLongBreak: endedPhase === "break" && wasLongBreak,
-            durationSeconds: getPhaseDuration(endedPhase),
+            durationSeconds: sessionDuration,
             startTime: state.currentSessionStart || new Date().toISOString(),
             endTime: new Date().toISOString(),
             preset: state.preset,
             completed: true
         };
+        if (endedPhase === "work") {
+            sessionRecord.overflowSeconds = overflowSeconds;
+        }
         state.sessionHistory.push(sessionRecord);
         state.currentSessionStart = null;
         saveHistory();
@@ -721,20 +765,43 @@
         } else {
             state.remainingSeconds = getPhaseDuration(state.phase);
         }
+        if (nextPhase === "break" && bonusBreakSeconds > 0) {
+            state.remainingSeconds += bonusBreakSeconds;
+        }
 
         saveStats();
-        flashCompleteState();
-        playSound(state.soundType, state.volume);
-        notify(endedPhase);
+        if (!suppressSignals) {
+            flashCompleteState();
+            playSound(state.soundType, state.volume);
+            notify(endedPhase);
+        }
 
         var breakLabel = state.isLongBreak ? "Long break" : "Break";
         var nextLabel = nextPhase === "work" ? "Work" : breakLabel;
-        announce((endedPhase === "work" ? "Work" : "Break") + " complete. " + nextLabel + " is ready.");
+        announce(customAnnouncement || ((endedPhase === "work" ? "Work" : "Break") + " complete. " + nextLabel + " is ready."));
         render();
 
-        if (state.autoStartNextPhase) {
+        if (state.autoStartNextPhase || shouldForceStartNext) {
             startTimer();
         }
+    }
+
+    function updateOverflowCredit() {
+        var work = Math.max(1, state.workDurationSeconds);
+        var ratio = state.breakDurationSeconds / work;
+        state.pendingBreakCreditSeconds = Math.max(0, Math.floor(state.overflowSeconds * ratio));
+    }
+
+    function enterOverflow(overflowSecondsAtEntry) {
+        state.remainingSeconds = 0;
+        state.inOverflow = true;
+        state.overflowSeconds = Math.max(0, Math.floor(overflowSecondsAtEntry || 0));
+        updateOverflowCredit();
+        flashCompleteState();
+        playSound(state.soundType, state.volume);
+        notify("work");
+        announce("Work complete. Flow state started. Switch to break when ready.");
+        render();
     }
 
     function tick() {
@@ -751,10 +818,23 @@
 
         if (elapsedWholeSeconds <= 0) return;
 
+        if (state.inOverflow) {
+            state.overflowSeconds += elapsedWholeSeconds;
+            state.lastTickEpochMs += elapsedWholeSeconds * 1000;
+            updateOverflowCredit();
+            render();
+            return;
+        }
+
+        var previousRemaining = state.remainingSeconds;
         state.remainingSeconds -= elapsedWholeSeconds;
         state.lastTickEpochMs += elapsedWholeSeconds * 1000;
 
         if (state.remainingSeconds <= 0) {
+            if (state.phase === "work" && state.allowFlowState) {
+                enterOverflow(Math.max(0, elapsedWholeSeconds - Math.max(0, previousRemaining)));
+                return;
+            }
             completePhase();
             return;
         }
@@ -764,7 +844,7 @@
 
     function startTimer() {
         if (state.isRunning) return;
-        if (state.remainingSeconds <= 0) {
+        if (state.remainingSeconds <= 0 && !state.inOverflow) {
             state.remainingSeconds = getPhaseDuration(state.phase);
         }
 
@@ -789,14 +869,31 @@
     function resetCurrentPhase() {
         stopTimer();
         state.currentSessionStart = null;
+        clearOverflowState();
         state.remainingSeconds = getPhaseDuration(state.phase);
         announce((state.phase === "work" ? "Work" : "Break") + " timer reset.");
         render();
     }
 
     function switchPhase() {
+        if (state.phase === "work" && state.inOverflow) {
+            var overflowSeconds = state.overflowSeconds;
+            var bonusBreakSeconds = state.pendingBreakCreditSeconds;
+            clearOverflowState();
+            completePhase({
+                sessionDurationSeconds: state.workDurationSeconds + overflowSeconds,
+                overflowSeconds: overflowSeconds,
+                bonusBreakSeconds: bonusBreakSeconds,
+                suppressSignals: true,
+                forceStartNextPhase: true,
+                announcement: "Flow state ended. Break started."
+            });
+            return;
+        }
+
         stopTimer();
         state.currentSessionStart = null;
+        clearOverflowState();
         state.isLongBreak = false;
         state.phase = state.phase === "work" ? "break" : "work";
         state.remainingSeconds = getPhaseDuration(state.phase);
@@ -816,10 +913,12 @@
         if (resetPhase) {
             stopTimer();
             state.currentSessionStart = null;
+            clearOverflowState();
             state.isLongBreak = false;
             state.phase = "work";
             state.remainingSeconds = state.workDurationSeconds;
         } else {
+            clearOverflowState();
             state.remainingSeconds = getPhaseDuration(state.phase);
         }
 
@@ -880,6 +979,7 @@
             sound: parseJson(safeGetItem(SOUND_KEY), null),
             longBreak: parseJson(safeGetItem(LONGBREAK_KEY), null),
             autoStartNextPhase: parseJson(safeGetItem(AUTO_START_NEXT_PHASE_KEY), false),
+            allowFlowState: parseJson(safeGetItem(ALLOW_FLOW_STATE_KEY), false),
             history: parseJson(safeGetItem(HISTORY_KEY), [])
         };
         var blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
@@ -908,6 +1008,9 @@
                 if (data.longBreak) safeSetItem(LONGBREAK_KEY, JSON.stringify(data.longBreak));
                 if (data.autoStartNextPhase !== undefined) {
                     safeSetItem(AUTO_START_NEXT_PHASE_KEY, JSON.stringify(!!data.autoStartNextPhase));
+                }
+                if (data.allowFlowState !== undefined) {
+                    safeSetItem(ALLOW_FLOW_STATE_KEY, JSON.stringify(!!data.allowFlowState));
                 }
                 if (Array.isArray(data.history)) safeSetItem(HISTORY_KEY, JSON.stringify(data.history));
 
@@ -1035,6 +1138,12 @@
             ui.autoStartNextPhase.addEventListener("change", function () {
                 state.autoStartNextPhase = !!ui.autoStartNextPhase.checked;
                 saveAutoStartNextPhaseSetting();
+            });
+        }
+        if (ui.allowFlowState) {
+            ui.allowFlowState.addEventListener("change", function () {
+                state.allowFlowState = !!ui.allowFlowState.checked;
+                saveAllowFlowStateSetting();
             });
         }
 

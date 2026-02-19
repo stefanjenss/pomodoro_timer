@@ -110,6 +110,30 @@ Build a local-first pomodoro timer that can run in constrained environments (inc
 - Next: GitHub-style heatmap for focus sessions.
 - Next: Dashboard views with charts.
 
+## 2026-02-19
+
+### Summary
+
+- Added a simple cross-platform local-run workflow so coworkers can launch the app via `http://localhost` instead of opening `index.html` directly.
+- Improved operational safety so closing the terminal also stops the local server automatically.
+
+### Features
+
+- Added: `/Users/stefanjenss/code/projects/pomodoro_timer/RUN_THIS.sh` for macOS/Linux one-command startup (`./RUN_THIS.sh [port]`).
+- Added: `/Users/stefanjenss/code/projects/pomodoro_timer/RUN_THIS.command` for macOS double-click launch.
+- Added: `/Users/stefanjenss/code/projects/pomodoro_timer/RUN_THIS.bat` for Windows double-click launch.
+- Added: `/Users/stefanjenss/code/projects/pomodoro_timer/RUN_LOCALLY.md` with teammate-focused setup and usage instructions.
+
+### Fixes
+
+- Fixed: local server lifecycle handling in `/Users/stefanjenss/code/projects/pomodoro_timer/RUN_THIS.sh` so the spawned `http.server` process is tied to terminal lifecycle.
+- Fixed: server cleanup on terminal close or signal by trapping `EXIT`, `INT`, `TERM`, and `HUP`, preventing accidental background server processes.
+
+### Decisions
+
+- Decision: use Python's built-in `http.server` as the runtime path for sharing locally.
+- Reason: zero project dependencies, works in constrained environments, and enables browser notification permissions that are blocked in `file://` contexts.
+
 ## Next Candidates (Backlog)
 
 - Dashboard views.
@@ -144,4 +168,3 @@ Copy/paste this block for each future update.
 
 - Next:
 ```
-

@@ -158,6 +158,11 @@
             box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--break-accent) 16%, white);
         }
 
+        .timer-shell.phase-overflow {
+            box-shadow: inset 0 0 0 3px color-mix(in srgb, #089ec4 24%, white);
+            background: linear-gradient(165deg, color-mix(in srgb, #b7ecfb 36%, var(--surface)), var(--surface));
+        }
+
         .timer-shell.phase-complete {
             animation: pulse 900ms ease-in-out 2;
             box-shadow: inset 0 0 0 4px var(--complete-ring);
@@ -227,6 +232,10 @@
 
         .progress-fill.break {
             background: linear-gradient(90deg, #1f7a50, #4caf7c);
+        }
+
+        .progress-fill.overflow {
+            background: linear-gradient(90deg, #0f7ea6, #33c2de);
         }
 
         @keyframes progressFlow {
@@ -651,6 +660,7 @@
             </div>
             <div class="settings-row">
                 <label><input id="autoStartNextPhase" type="checkbox"> Auto-start next phase</label>
+                <label><input id="allowFlowState" type="checkbox"> Allow flow state</label>
             </div>
         </section>
 
